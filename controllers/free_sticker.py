@@ -13,7 +13,7 @@ from PIL import Image as PILImage
 
 # WhatsApp sticker specs
 STICKER_SIZE = 512
-MAX_FILE_SIZE = 5000 * 1024  # 500KB for animated
+MAX_FILE_SIZE = 500 * 1024  # 500KB for animated
 
 
 def generate_sticker_free(prompt: str, reference_image_path: str = None) -> PILImage.Image:

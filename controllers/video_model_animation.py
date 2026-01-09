@@ -125,6 +125,9 @@ async def generate_runware_transparent_sticker(
                 print(f"Processed {i + 1}/{len(frame_images)} frames")
 
         # 6️⃣ Create animated WebP
+        MAX_FILE_SIZE = 500 * 1024  # 500KB
+
+        # 6️⃣ Create animated WebP
         print("Creating animated WebP...")
         transparent_frames[0].save(
             transparent_webp_path,
@@ -132,8 +135,22 @@ async def generate_runware_transparent_sticker(
             append_images=transparent_frames[1:],
             duration=int(1000 / fps),
             loop=0,
-            format="WEBP"
+            format="WEBP",
+            quality=85
         )
+
+        # Check file size & compress if needed
+        if os.path.getsize(transparent_webp_path) > MAX_FILE_SIZE:
+            print("⚠️ Compressing to meet WhatsApp size limit...")
+            transparent_frames[0].save(
+                transparent_webp_path,
+                save_all=True,
+                append_images=transparent_frames[1:],
+                duration=int(1000 / fps),
+                loop=0,
+                format="WEBP",
+                quality=60
+            )
 
         print(f"✅ Original: {original_video_path}")
         print(f"✅ Transparent: {transparent_webp_path}")
@@ -145,9 +162,17 @@ async def generate_runware_transparent_sticker(
 
 
 if __name__ == "__main__":
+    # ========== CUSTOMIZE HERE ==========
+    prompt = "A cat standing still suddenly becomes frozen, covered in ice, frost spreading over their body"
+    duration = 5  # Video duration in seconds (change this!)
+    fps = 10      # Frames per second for WebP
+    # ====================================
+
     original, transparent = asyncio.run(
         generate_runware_transparent_sticker(
-            "A cat standing still suddenly becomes frozen, covered in ice, frost spreading over their body"
+            prompt=prompt,
+            duration=duration,
+            fps=fps
         )
     )
     print(f"Original: {original}")

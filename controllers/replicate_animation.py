@@ -144,7 +144,7 @@ def create_animated_sticker(frame_paths: list, output: str = "animated_sticker_n
     print(f"✅ Saved: {output} ({size_kb:.0f}KB)")
 
     # Compress if too large for WhatsApp (max 500KB)
-    if size_kb > 1000:
+    if size_kb > 500:
         print("⚠️ File > 500KB, compressing...")
         frames_loop[0].save(
             output,

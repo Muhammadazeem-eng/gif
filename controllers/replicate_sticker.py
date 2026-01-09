@@ -120,7 +120,7 @@ def create_animated_webp(image_path: str, output_path: str = "sticker.webp",
     size_kb = os.path.getsize(output_path) / 1024
     print(f"✅ Animated sticker saved: {output_path} ({size_kb:.0f}KB)")
 
-    if size_kb > 1500:
+    if size_kb > 500:
         print("⚠️ File > 500KB, compressing...")
         compress_webp(output_path, animated_frames, duration)
 

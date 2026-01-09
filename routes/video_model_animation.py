@@ -27,6 +27,7 @@ task_storage = {}
 
 class VideoGenerationRequest(BaseModel):
     prompt: str = Field(..., description="Text prompt for video generation")
+    duration: int = Field(default=3, ge=1, le=10, description="Video duration in seconds (1-10)")
 
 
 def cleanup_files(task_id: str):
@@ -55,7 +56,8 @@ async def generate_sticker(request: VideoGenerationRequest):
     """
     try:
         original_video_path, transparent_video_path = await generate_runware_transparent_sticker(
-            prompt=request.prompt
+            prompt=request.prompt,
+            duration=request.duration
         )
 
         # Extract task_id from filename
@@ -100,7 +102,7 @@ async def get_transparent(task_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=404, detail="File not found")
 
     # Auto cleanup after file is sent
-    background_tasks.add_task(cleanup_files, task_id)
+    # background_tasks.add_task(cleanup_files, task_id)
 
     return FileResponse(
         transparent_path,
