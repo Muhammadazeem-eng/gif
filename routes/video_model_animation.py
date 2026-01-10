@@ -16,8 +16,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-
-from controllers.video_model_animation import generate_runware_transparent_sticker
+from typing import Literal
+from controllers.video_model_animation import generate_runware_transparent_sticker,generate_runware_video_only
 
 router = APIRouter()
 
@@ -109,3 +109,33 @@ async def get_transparent(task_id: str, background_tasks: BackgroundTasks):
         media_type="image/webp",
         filename="sticker_transparent.webp"
     )
+
+
+class VideoOnlyRequest(BaseModel):
+    prompt: str
+    duration: int = Field(ge=1, le=10)
+    aspect_ratio: Literal[
+        "16:9_480p", "4:3_480p", "1:1_480p", "3:4_480p",
+        "9:16_480p", "21:9_480p",
+        "16:9_720p", "4:3_720p", "1:1_720p", "3:4_720p",
+        "9:16_720p", "21:9_720p"
+    ]
+
+
+@router.post("/generate-video-only")
+async def generate_video(request: VideoOnlyRequest):
+    try:
+        video_path = await generate_runware_video_only(
+            prompt=request.prompt,
+            duration=request.duration,
+            aspect_ratio=request.aspect_ratio,
+        )
+
+        return FileResponse(
+            video_path,
+            media_type="video/mp4",
+            filename="generated_video.mp4"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
