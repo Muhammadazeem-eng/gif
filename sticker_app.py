@@ -28,7 +28,7 @@ from controllers.replicate_animation import generate_animated_sticker as replica
 from controllers.gemini_sticker import generate_sticker as gemini_generate, \
     create_animated_webp as gemini_create_animated
 from controllers.gemini_animation import generate_animated_sticker as gemini_animated_sticker
-from controllers.video_model_animation import generate_runware_transparent_sticker
+from controllers.video_model_animation import generate_runware_transparent_sticker,generate_runware_video_only
 from controllers.image_generation import generate_image
 # ============== STYLE CONSTANTS ==============
 DARK_BG = "#1a1a2e"
@@ -41,6 +41,25 @@ TEXT_SECONDARY = "#a0a0a0"
 BORDER_COLOR = "#2d2d5a"
 SUCCESS_COLOR = "#22c55e"
 WARNING_COLOR = "#f59e0b"
+
+
+VIDEO_ONLY_ASPECT_RATIOS = {
+    "16:9 – 480p": "16:9_480p",
+    "4:3 – 480p": "4:3_480p",
+    "1:1 – 480p": "1:1_480p",
+    "3:4 – 480p": "3:4_480p",
+    "9:16 – 480p": "9:16_480p",
+    "21:9 – 480p": "21:9_480p",
+
+    "16:9 – 720p": "16:9_720p",
+    "4:3 – 720p": "4:3_720p",
+    "1:1 – 720p": "1:1_720p",
+    "3:4 – 720p": "3:4_720p",
+    "9:16 – 720p": "9:16_720p",
+    "21:9 – 720p": "21:9_720p",
+}
+
+
 
 STYLESHEET = f"""
 QMainWindow {{
@@ -417,11 +436,26 @@ class WorkerThread(QThread):
                 self.progress.emit("Generating image with Pollinations.ai...")
                 output_path = generate_image(
                     prompt=self.params["prompt"],
-                    width=self.params["width"],
-                    height=self.params["height"],
+                    aspect_ratio=self.params["aspect_ratio"],
                     output_file=self.params["output_file"],
-                    seed=self.params["seed"]
                 )
+
+            elif self.task_type == "video_only":
+                self.progress.emit("Generating video (MP4 only)...")
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                try:
+                    output_path = loop.run_until_complete(
+                        generate_runware_video_only(
+                            prompt=self.params["prompt"],
+                            duration=self.params["duration"],
+                            aspect_ratio=self.params["aspect_ratio"],
+                        )
+                    )
+                finally:
+                    loop.close()
 
             if output_path:
                 self.finished.emit(output_path)
@@ -488,6 +522,7 @@ class StickerGeneratorApp(QMainWindow):
         self.tabs.addTab(self.create_stickers_tab(), "💜 Stickers")
         self.tabs.addTab(self.create_animations_tab(), "🎬 Animations")
         self.tabs.addTab(self.create_premium_tab(), "⭐ Premium Video")
+        self.tabs.addTab(self.create_video_only_tab(), "🎥 Video Only")
         self.tabs.addTab(self.create_image_gen_tab(), "🖼️ Image Gen")
 
         main_layout.addWidget(self.tabs)
@@ -592,6 +627,24 @@ class StickerGeneratorApp(QMainWindow):
         layout.addWidget(right_panel, stretch=1)
 
         return tab
+
+    def generate_video_only(self):
+        prompt = self.video_only_prompt.text().strip()
+        if not prompt:
+            QMessageBox.warning(self, "Error", "Please enter a prompt")
+            return
+
+        aspect_ratio_key = VIDEO_ONLY_ASPECT_RATIOS[
+            self.video_only_ratio.currentText()
+        ]
+
+        params = {
+            "prompt": prompt,
+            "duration": self.video_only_duration.value(),
+            "aspect_ratio": aspect_ratio_key,
+        }
+
+        self.start_worker("video_only", params, "video")
 
     def create_animations_tab(self) -> QWidget:
         """Create the Animations tab."""
@@ -767,6 +820,70 @@ class StickerGeneratorApp(QMainWindow):
 
         return tab
 
+    def create_video_only_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QHBoxLayout(tab)
+        layout.setSpacing(24)
+
+        # LEFT PANEL
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setSpacing(16)
+
+        # Prompt
+        prompt_label = QLabel("Video Prompt")
+        prompt_label.setObjectName("sectionTitle")
+        left_layout.addWidget(prompt_label)
+
+        self.video_only_prompt = QLineEdit()
+        self.video_only_prompt.setPlaceholderText(
+            "A cinematic dragon flying through clouds..."
+        )
+        left_layout.addWidget(self.video_only_prompt)
+
+        # Duration
+        duration_label = QLabel("Duration (seconds)")
+        duration_label.setObjectName("sectionTitle")
+        left_layout.addWidget(duration_label)
+
+        self.video_only_duration = QSpinBox()
+        self.video_only_duration.setRange(1, 10)
+        self.video_only_duration.setValue(3)
+        left_layout.addWidget(self.video_only_duration)
+
+        # Aspect Ratio
+        ratio_label = QLabel("Aspect Ratio")
+        ratio_label.setObjectName("sectionTitle")
+        left_layout.addWidget(ratio_label)
+
+        self.video_only_ratio = QComboBox()
+        self.video_only_ratio.addItems(VIDEO_ONLY_ASPECT_RATIOS.keys())
+        left_layout.addWidget(self.video_only_ratio)
+
+        left_layout.addStretch()
+
+        # Generate Button
+        self.video_only_generate_btn = QPushButton("🎥 Generate Video")
+        self.video_only_generate_btn.setFixedHeight(50)
+        self.video_only_generate_btn.clicked.connect(self.generate_video_only)
+        left_layout.addWidget(self.video_only_generate_btn)
+
+        layout.addWidget(left_panel, 1)
+
+        self.video_only_progress = QProgressBar()
+        self.video_only_progress.setVisible(False)
+        left_layout.addWidget(self.video_only_progress)
+
+        self.video_only_status = QLabel("")
+        self.video_only_status.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        left_layout.addWidget(self.video_only_status)
+
+        # RIGHT PANEL (PREVIEW)
+        right_panel = self.create_preview_panel("video")
+        layout.addWidget(right_panel, 1)
+
+        return tab
+
     def create_image_gen_tab(self) -> QWidget:
         """Create the Image Generation tab."""
         tab = QWidget()
@@ -811,64 +928,24 @@ class StickerGeneratorApp(QMainWindow):
         left_layout.addWidget(hint_label)
 
         # Size Settings
+        # Image Size (Aspect Ratio)
         size_group = QGroupBox("Image Size")
-        size_layout = QGridLayout(size_group)
+        size_layout = QVBoxLayout(size_group)
 
-        # Width
-        width_label = QLabel("Width")
-        width_label.setObjectName("sectionTitle")
-        size_layout.addWidget(width_label, 0, 0)
+        ratio_label = QLabel("Aspect Ratio")
+        ratio_label.setObjectName("sectionTitle")
+        size_layout.addWidget(ratio_label)
 
-        self.image_width = QSpinBox()
-        self.image_width.setRange(256, 2048)
-        self.image_width.setValue(1024)
-        self.image_width.setSingleStep(64)
-        size_layout.addWidget(self.image_width, 1, 0)
-
-        # Height
-        height_label = QLabel("Height")
-        height_label.setObjectName("sectionTitle")
-        size_layout.addWidget(height_label, 0, 1)
-
-        self.image_height = QSpinBox()
-        self.image_height.setRange(256, 2048)
-        self.image_height.setValue(1024)
-        self.image_height.setSingleStep(64)
-        size_layout.addWidget(self.image_height, 1, 1)
-
-        # # Preset buttons
-        # preset_label = QLabel("Presets:")
-        # preset_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        # size_layout.addWidget(preset_label, 2, 0, 1, 2)
-        #
-        # preset_layout = QHBoxLayout()
-        #
-        # square_btn = QPushButton("1:1")
-        # square_btn.setObjectName("secondaryBtn")
-        # square_btn.setFixedWidth(60)
-        # square_btn.clicked.connect(lambda: self.set_image_size(1024, 1024))
-        # preset_layout.addWidget(square_btn)
-        #
-        # landscape_btn = QPushButton("16:9")
-        # landscape_btn.setObjectName("secondaryBtn")
-        # landscape_btn.setFixedWidth(60)
-        # landscape_btn.clicked.connect(lambda: self.set_image_size(1920, 1080))
-        # preset_layout.addWidget(landscape_btn)
-        #
-        # portrait_btn = QPushButton("9:16")
-        # portrait_btn.setObjectName("secondaryBtn")
-        # portrait_btn.setFixedWidth(60)
-        # portrait_btn.clicked.connect(lambda: self.set_image_size(1080, 1920))
-        # preset_layout.addWidget(portrait_btn)
-        #
-        # wide_btn = QPushButton("21:9")
-        # wide_btn.setObjectName("secondaryBtn")
-        # wide_btn.setFixedWidth(60)
-        # wide_btn.clicked.connect(lambda: self.set_image_size(2048, 878))
-        # preset_layout.addWidget(wide_btn)
-        #
-        # preset_layout.addStretch()
-        # size_layout.addLayout(preset_layout, 3, 0, 1, 2)
+        self.image_aspect_ratio = QComboBox()
+        self.image_aspect_ratio.addItems([
+            "1:1 (Square) – 1024x1024",
+            "16:9 (Landscape) – 1920x1080",
+            "9:16 (Portrait) – 1080x1920",
+            "4:3 (Standard) – 1600x1200",
+            "3:4 (Portrait) – 1200x1600",
+            "21:9 (Ultra-wide) – 2560x1080",
+        ])
+        size_layout.addWidget(self.image_aspect_ratio)
 
         left_layout.addWidget(size_group)
 
@@ -983,34 +1060,33 @@ class StickerGeneratorApp(QMainWindow):
         layout.addWidget(preview_container, stretch=1)
 
         # Save button
-        # Save button(s)
-        save_btn = QPushButton("💾 Save Sticker")
-        save_btn.setObjectName("secondaryBtn")
-        save_btn.clicked.connect(lambda: self.save_sticker(panel_type))
-
-        if panel_type == "sticker":
-            self.sticker_save_btn = save_btn
-        elif panel_type == "animation":
-            self.animation_save_btn = save_btn
-        elif panel_type == "image":
-            save_btn.setText("💾 Save Image")
-            self.image_save_btn = save_btn
-        else:
-            self.video_save_btn = save_btn
-
-            # Add MP4 save button for video
+        # Save buttons
+        if panel_type == "video":
+            # ONLY MP4 for video
             save_mp4_btn = QPushButton("🎬 Save MP4")
             save_mp4_btn.setObjectName("secondaryBtn")
             save_mp4_btn.clicked.connect(self.save_video_mp4)
             save_mp4_btn.setEnabled(False)
             self.video_save_mp4_btn = save_mp4_btn
 
-        save_btn.setEnabled(False)
-        layout.addWidget(save_btn)
+            layout.addWidget(save_mp4_btn)
 
-        # Add MP4 button only for video panel
-        if panel_type == "video":
-            layout.addWidget(self.video_save_mp4_btn)
+        else:
+            # Sticker / Animation / Image
+            save_btn = QPushButton("💾 Save Sticker")
+            save_btn.setObjectName("secondaryBtn")
+            save_btn.clicked.connect(lambda: self.save_sticker(panel_type))
+            save_btn.setEnabled(False)
+
+            if panel_type == "sticker":
+                self.sticker_save_btn = save_btn
+            elif panel_type == "animation":
+                self.animation_save_btn = save_btn
+            elif panel_type == "image":
+                save_btn.setText("💾 Save Image")
+                self.image_save_btn = save_btn
+
+            layout.addWidget(save_btn)
 
         return frame
 
@@ -1126,19 +1202,19 @@ class StickerGeneratorApp(QMainWindow):
         self.start_worker("video_animation", params, "video")
 
     def generate_image(self):
-        """Generate image using Pollinations."""
         prompt = self.image_prompt.text().strip()
         if not prompt:
             QMessageBox.warning(self, "Error", "Please enter a prompt")
             return
 
-        import random
+        # Extract aspect ratio key ("4:3", "16:9", etc.)
+        selected_text = self.image_aspect_ratio.currentText()
+        aspect_ratio = selected_text.split(" ")[0]  # "4:3"
+
         params = {
             "prompt": prompt,
-            "width": self.image_width.value(),
-            "height": self.image_height.value(),
-            "seed": random.randint(1, 99999),
-            "output_file": "output_image.jpg"
+            "aspect_ratio": aspect_ratio,
+            "output_file": "output_image.jpg",
         }
 
         self.start_worker("image_generation", params, "image")
@@ -1163,11 +1239,30 @@ class StickerGeneratorApp(QMainWindow):
             self.image_progress.setRange(0, 0)
             self.image_status.setText("Starting...")
 
-        else:
-            self.video_generate_btn.setEnabled(False)
-            self.video_progress.setVisible(True)
-            self.video_progress.setRange(0, 0)
-            self.video_status.setText("Starting...")
+
+        elif panel_type == "video":
+
+            # Premium Video OR Video Only
+
+            if hasattr(self, "video_only_generate_btn"):
+
+                self.video_only_generate_btn.setEnabled(False)
+
+                self.video_only_progress.setVisible(True)
+
+                self.video_only_progress.setRange(0, 0)
+
+                self.video_only_status.setText("Starting...")
+
+            else:
+
+                self.video_generate_btn.setEnabled(False)
+
+                self.video_progress.setVisible(True)
+
+                self.video_progress.setRange(0, 0)
+
+                self.video_status.setText("Starting...")
 
         # Create and start worker
         self.worker = WorkerThread(task_type, params)
@@ -1217,20 +1312,72 @@ class StickerGeneratorApp(QMainWindow):
 
 
 
+
+        elif panel_type == "video":
+
+            # ===== VIDEO ONLY (MP4) =====
+
+            self.video_only_generate_btn.setEnabled(True)
+
+            self.video_only_progress.setVisible(False)
+
+            self.current_video_mp4_path = output_path
+
+            self.video_only_status.setText("✅ Video generated. Click Save MP4.")
+
+            # MP4 cannot be previewed — show message instead
+
+            self.video_placeholder.setText(
+                "🎬 Video generated\n\nPreview not available\nClick 'Save MP4' to view"
+            )
+
+            self.video_placeholder.setStyleSheet("""
+                QLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #a0a0a0;
+                }
+            """)
+
+            self.video_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.video_placeholder.setVisible(True)
+            self.video_preview_label.setVisible(False)
+
+            self.video_save_mp4_btn.setEnabled(True)
+
+
         else:
-            # Handle video with both paths (webp|mp4)
+
+            # ===== PREMIUM VIDEO (WEBP + MP4) =====
+
             if "|" in output_path:
                 webp_path, mp4_path = output_path.split("|")
+
                 self.video_preview_path = webp_path
+
                 self.current_video_mp4_path = mp4_path
+
                 output_path = webp_path
 
             self.video_generate_btn.setEnabled(True)
+
             self.video_progress.setVisible(False)
+
             self.video_status.setText(f"✅ Saved: {output_path}")
+
             self.video_save_btn.setEnabled(True)
+
             self.video_save_mp4_btn.setEnabled(True)
-            self.update_preview(output_path, self.video_preview_label, self.video_placeholder)
+
+            self.update_preview(
+
+                output_path,
+
+                self.video_preview_label,
+
+                self.video_placeholder
+
+            )
 
     def on_generation_error(self, error: str, panel_type: str):
         """Handle generation error."""
