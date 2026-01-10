@@ -425,6 +425,8 @@ async def generate_runware_video_only(
     aspect_ratio: str,
     fps: int = 24,
 ) -> str:
+    print("▶️ generate_runware_video_only() started")
+
     if aspect_ratio not in VIDEO_ASPECT_RATIOS:
         raise ValueError(f"Invalid aspect_ratio: {aspect_ratio}")
 
@@ -435,6 +437,7 @@ async def generate_runware_video_only(
 
     temp_id = uuid.uuid4().hex
     output_path = os.path.join(output_dir, f"{temp_id}_video.mp4")
+    print(f"📁 Output path: {output_path}")
 
     runware = Runware(
         api_key=os.environ.get("RUNWARE_API_KEY"),
@@ -457,11 +460,14 @@ async def generate_runware_video_only(
             outputQuality=85,
             deliveryMethod="async",
         )
+        print(f"🚀 Submitting video inference task: {task_uuid}")
 
         response = await runware.videoInference(requestVideo=request)
 
         video_url = None
         for _ in range(120):
+            print("⏳ Checking task status...")
+
             results = await runware.getResponse(
                 taskUUID=response.taskUUID,
                 numberResults=1
